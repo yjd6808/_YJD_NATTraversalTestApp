@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using LiteNetLib;
+using LiteNetLib.Utils;
 using NATShared;
 
 namespace NATClient
@@ -18,7 +19,7 @@ namespace NATClient
         {
             ThreadSafeLogger.WriteLine("NAT Traversal Test 클라이언트 입니다.");
             ThreadSafeLogger.WriteLine("테스트 조건 (1) : 해당 클라이언트는 공유기 환경에서 실행되어야합니다. (아닐 경우 제대로된 테스트 안됨)");
-            ThreadSafeLogger.WriteLine("테스트 조건 (2) : 1 ~ 7번 옵션 모두 제대로 실행될 경우 Udp Nat Traversal 테스트는 성공입니다.");
+            ThreadSafeLogger.WriteLine("테스트 조건 (2) : 1 ~ 8번 옵션 모두 제대로 실행될 경우 Udp Nat Traversal 테스트는 성공입니다.");
             ThreadSafeLogger.WriteLine("테스트 목적 : Udp Nat Traversal 검증 및 패킷 손실 없는 Udp 통신입니다.");
             ThreadSafeLogger.WriteLine("작성자 : 윤정도\n");
             ThreadSafeLogger.WriteLine("<---------------------------------------------------------->\n");
@@ -29,15 +30,18 @@ namespace NATClient
 
             while (true)
             {
-                ThreadSafeLogger.WriteLine("당신의 ID : {0} / Internal IP : {1} / External IP : {2}", NATClientApp.GetInstance().ID, NATClientApp.GetInstance().InternalIP, NATClientApp.GetInstance().ExternallP);
+                if (NATClientApp.GetInstance().IsTestCase8Running)
+                    continue;
+
+                ThreadSafeLogger.WriteLine("당신의 ID : {0} / Internal IP : {1}", NATClientApp.GetInstance().ID, NATClientApp.GetInstance().InternalIP);
                 ThreadSafeLogger.WriteLine("1. 서버와 연결");
                 ThreadSafeLogger.WriteLine("2. 서버와 연결 종료");
                 ThreadSafeLogger.WriteLine("3. 서버에 에코 메시지 전달");
                 ThreadSafeLogger.WriteLine("4. 서버에 접속한 클라이언트 목록 출력");
                 ThreadSafeLogger.WriteLine("5. NAT 홀펀칭 P2P 연결시도");
-                ThreadSafeLogger.WriteLine("6. NAT 클라 목록 보기");
-                ThreadSafeLogger.WriteLine("7. NAT 클라에게 채팅 메시지 전송");
-                ThreadSafeLogger.WriteLine("8. Udp 패킷 신뢰성 검사 4096바이트 1만회 전송");
+                ThreadSafeLogger.WriteLine("6. P2P로 연결된 클라 목록 보기");
+                ThreadSafeLogger.WriteLine("7. P2P로 연결된 클라에게 채팅 메시지 전송");
+                ThreadSafeLogger.WriteLine("8. P2P로 연결된 클라에게 Udp 패킷 신뢰성 검사 4096바이트 에코 송수신 2천회 시작");
                 ThreadSafeLogger.Write("> 입력 : ");
                 string cmd = Console.ReadLine();
 
@@ -57,12 +61,17 @@ namespace NATClient
 
                 switch (choose)
                 {
+                    //1. 서버와 연결
                     case 1:
                         Task.Run(() => NATClientApp.GetInstance().Run());
                         break;
+
+                    //2. 서버와 연결 종료
                     case 2:
                         NATClientApp.GetInstance().Stop();
                         break;
+
+                    //3. 서버에 에코 메시지 전달
                     case 3:
                         ThreadSafeLogger.Write("> 전송할 메시지 입력 : ");
                         string msg = Console.ReadLine();
@@ -77,10 +86,14 @@ namespace NATClient
                             NATClientApp.GetInstance().SendEchoMessageToMasterServer(msg);
                         }
                         break;
+
+                    //4. 서버에 접속한 클라이언트 목록 출력
                     case 4:
                         ThreadSafeLogger.WriteLine("[중앙서버에 접속중인 유저목록을 출력합니다.]");
                         NATClientApp.GetInstance().PrintServerConnectedClients();
                         break;
+
+                    //5. NAT 홀펀칭 P2P 연결시도
                     case 5:
                         if (NATClientApp.GetInstance().ServerConnectedClients.Count <= 1)
                         {
@@ -102,7 +115,7 @@ namespace NATClient
                                 KeyValuePair<long, NATClientInfo> selectedClient = NATClientApp.GetInstance().ServerConnectedClients.ElementAt(selectedClientIdx - 1);
                                 string recipientID = selectedClient.Key.ToString();
                                 string natToken = RandomString(10);
-                                selectedClient.Value.NatToken = natToken;
+                                selectedClient.Value.P2PNatToken = natToken;
 
                                 if (long.Parse(recipientID) == NATClientApp.GetInstance().ID)
                                 {
@@ -111,7 +124,7 @@ namespace NATClient
                                 }
 
                                 ThreadSafeLogger.WriteLine("중앙서버에게 {0}의 토큰값으로 NAT Traversal Introduction을 요청했습니다.", recipientID);
-                                
+
                                 NATClientApp.GetInstance().SendPacketToMasterServer(new PtkNatTraversalRequest(NATClientApp.GetInstance().ID, long.Parse(recipientID), natToken));
                                 NATClientApp.GetInstance().SendNatIntroductionRequest(natToken);
                             }
@@ -119,14 +132,17 @@ namespace NATClient
                                 ThreadSafeLogger.WriteLine("인덱스 번호를 정확히 입력해주세요.");
                         }
                         break;
+
+                    //6.P2P로 연결된 클라 목록 보기
                     case 6:
                         ThreadSafeLogger.WriteLine("[P2P 연결중인 유저목록을 출력합니다.]");
                         NATClientApp.GetInstance().PrintP2PConnectedClients();
                         break;
+                    //7. P2P로 연결된 클라에게 채팅 메시지 전송
                     case 7:
-                        if (NATClientApp.GetInstance().P2PConnectedClients.Count == 0)
+                        if (NATClientApp.GetInstance().P2PConnectingPeers.Count() <= 0)
                         {
-                            ThreadSafeLogger.WriteLine("연결된 NAT 클라이언트가 없습니다. 5번 항목을 먼저 진행해주세요.");
+                            ThreadSafeLogger.WriteLine("연결된 P2P 클라이언트가 없습니다. 5번 항목을 먼저 진행해주세요.");
                             continue;
                         }
 
@@ -139,7 +155,7 @@ namespace NATClient
                             ThreadSafeLogger.WriteLine("메시지를 입력하지 않아서 전송하지 못했습니다");
                         else
                         {
-                            if (selectedP2pClientIdx >= 1 && selectedP2pClientIdx <= NATClientApp.GetInstance().P2PConnectedClients.Count)
+                            if (selectedP2pClientIdx >= 0 && selectedP2pClientIdx < NATClientApp.GetInstance().Manager.Count())
                             {
                                 ThreadSafeLogger.Write("> 전송할 메시지 입력 : ");
                                 string p2pMsg = Console.ReadLine();
@@ -150,19 +166,55 @@ namespace NATClient
                                 }
                                 else
                                 {
-                                    
-                                    NATClientInfo clientInfo = NATClientApp.GetInstance().P2PConnectedClients.Values.ElementAt(selectedP2pClientIdx - 1).ClientInfo;
-
-
-                                    ThreadSafeLogger.WriteLine(clientInfo.ID + " [NAT 클라에게 채팅 메시지를 전송합니다.] " + clientInfo.P2PPeer.EndPoint);
-                                    NATClientApp.GetInstance().SendPacketToPeer(clientInfo.P2PPeer, new PtkChatMessage(NATClientApp.GetInstance().ID, p2pMsg));
+                                    NATClientInfo clientInfo = NATClientApp.GetInstance().P2PConnectingPeers.ElementAt(selectedP2pClientIdx).Tag as NATClientInfo;
+                                    if (clientInfo == null)
+                                    {
+                                        ThreadSafeLogger.WriteLine("당신의 서버에서 정보를 찾을 수 없습니다. 이상한 유저입니다.");
+                                    }
+                                    else
+                                    {
+                                        ThreadSafeLogger.WriteLine(clientInfo.ID + " [NAT 클라에게 채팅 메시지를 전송합니다.] " + clientInfo.Peer.EndPoint);
+                                        NATClientApp.GetInstance().SendPacketToPeer(clientInfo.Peer, new PtkChatMessage(NATClientApp.GetInstance().ID, p2pMsg));
+                                    }
                                 }
+                            }
+                        }
+                        break;
+
+                    //8.P2P로 연결된 클라에게 Udp 패킷 신뢰성 검사 4096바이트 2천회 전송
+                    case 8:
+                        if (NATClientApp.GetInstance().P2PConnectingPeers.Count() <= 0)
+                        {
+                            ThreadSafeLogger.WriteLine("연결된 P2P 클라이언트가 없습니다. 5번 항목을 먼저 진행해주세요.");
+                            continue;
+                        }
+
+                        ThreadSafeLogger.Write("> 테스트 통신을 시도할 P2P 클라이언트를 선택해주세요 : ");
+                        string p2pClientIdxStr2 = Console.ReadLine();
+
+                        int.TryParse(p2pClientIdxStr2, out int selectedP2pClientIdx2);
+                        if (p2pClientIdxStr2.Length <= 0)
+                            ThreadSafeLogger.WriteLine("선택을 해라 좀!");
+                        else
+                        {
+                            NATClientInfo clientInfo = NATClientApp.GetInstance().P2PConnectingPeers.ElementAt(selectedP2pClientIdx2).Tag as NATClientInfo;
+                            if (clientInfo == null)
+                            {
+                                ThreadSafeLogger.WriteLine("당신의 서버에서 정보를 찾을 수 없습니다. 이상한 유저입니다.");
+                            }
+                            else
+                            {
+                                Console.Clear();
+                                Console.CursorVisible = false;
+                                NATClientApp.GetInstance().TestPacketCount = 0;
+                                NATClientApp.GetInstance().IsTestCase8Running = true;
+                                ThreadSafeLogger.WriteLine(clientInfo.ID + " 와 패킷통신 무결성 검증 테스트 2천회를 시작합니다.\n이 작업을 하는동안 다른 작업은 하실 수 없습니다.");
+                                NATClientApp.GetInstance().SendPacketToPeer(clientInfo.Peer, new PtkReliableTestStart(NATClientApp.GetInstance().ID));
                             }
                         }
                         break;
                     default:
                         break;
-
                 }
                 ThreadSafeLogger.WriteLine();
             }

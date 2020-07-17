@@ -42,6 +42,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ByteUnitConverter.cs" />
+    <Compile Include="Extrensions.cs" />
     <Compile Include="INetworkPacket.cs" />
     <Compile Include="NetworkPacet.cs" />
     <Compile Include="NetworkPacketConverter.cs" />

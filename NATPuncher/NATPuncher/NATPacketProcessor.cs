@@ -22,6 +22,8 @@ namespace NATPuncher
             _puncherApp = puncherApp;
         }
 
+        // ===============================
+
         public void OnPacketEchoMessage(NetPeer peer, PtkEchoMessage ptkEchoMessage)
         {
             ptkEchoMessage.ID = -1;
@@ -30,51 +32,67 @@ namespace NATPuncher
 
         public void OnPacketClientConnect(NetPeer peer, PtkClientConnect ptkClientConnect)
         {
-            Console.WriteLine(peer.NetManager.LocalEndPointv4.ToString());
-            if (_puncherApp.ConnectedPeers.TryGetValue(ptkClientConnect.ID, out NATClientInfo client))
-            {
-                _puncherApp.ConnectedPeers[ptkClientConnect.ID].InternalEndpoint = ptkClientConnect.InternalEP;
-                _puncherApp.ConnectedPeers[ptkClientConnect.ID].Peer = peer;
-            }
+            if (peer.Tag == null)
+                peer.Tag = new NATClientInfo(ptkClientConnect.ID, peer);
             else
-            {
-                _puncherApp.ConnectedPeers.Add(ptkClientConnect.ID, new NATClientInfo(ptkClientConnect.ID, ptkClientConnect.InternalEP, peer.EndPoint, peer));
-            }
-            NATClientInfo connectedClientInfo = _puncherApp.ConnectedPeers[ptkClientConnect.ID];
+                _puncherApp.Manager.GetPeerInfoByNetPeerID(peer.Id).Update(new NATClientInfo(ptkClientConnect.ID, peer));
 
+            NATClientInfo clinetInfo = peer.Tag as NATClientInfo;
 
             //접속중인 유저들 중 접속한 유저만 제외하고 모두 에코 전송
-            foreach (NATClientInfo c in _puncherApp.ConnectedPeers.Values)
-            {
-                if (c.Peer == connectedClientInfo.Peer) continue;
-                _puncherApp.SendPacketToPeer(c.Peer, new PtkClientConnectAck(-1, connectedClientInfo));
-            }
+            _puncherApp.Manager
+                .Except(new NetPeer[1] { peer })
+                .ForEach( x => _puncherApp.SendPacketToPeer(x, new PtkClientConnectAck(-1, clinetInfo)));
 
             //현재 접속중인 유저 정보들을 접속한 유저에게 전달
-            foreach (KeyValuePair<long, NATClientInfo> c in _puncherApp.ConnectedPeers)
-                _puncherApp.SendPacketToPeer(peer, new PtkClientConnectAck(-1, c.Value));
+            _puncherApp.Manager
+                .ForEach(x => _puncherApp.SendPacketToPeer(peer, new PtkClientConnectAck(-1, _puncherApp.Manager.GetPeerInfoByNetPeerID(x.Id))));
         }
 
         public void OnPacketClientDisconnect(NetPeer sender, PtkClientDisconnect ptkClientDisconnect)
         {
             ThreadSafeLogger.WriteLine(ptkClientDisconnect.ID + " 유저가 접속을 종료하였습니다.");
 
-            if (_puncherApp.ConnectedPeers.TryGetValue(ptkClientDisconnect.ID, out NATClientInfo client))
-                _puncherApp.ConnectedPeers.Remove(ptkClientDisconnect.ID);
-
-            //남아있는 유저에게 전송
-            foreach (NATClientInfo c in _puncherApp.ConnectedPeers.Values)
-                _puncherApp.SendPacketToPeer(c.Peer, new PtkClientDisconnectAck(-1, ptkClientDisconnect.ID));
+            //남아있는 유저들에게 모두 전송
+            _puncherApp.Manager
+                .Except(new NetPeer[1] { sender })
+                .ForEach(x => _puncherApp.SendPacketToPeer(x, new PtkClientDisconnectAck(-1, ptkClientDisconnect.ID)));
         }
 
         public void OnPacketNatTraversalRequest(NetPeer sender, PtkNatTraversalRequest ptkNatTraversalRequest)
         {
-            if (_puncherApp.ConnectedPeers.TryGetValue(ptkNatTraversalRequest.RecipientID, out NATClientInfo recipient))
-                _puncherApp.SendPacketToPeer(recipient.Peer, new PtkNatTraversalRequestAck(-1, ptkNatTraversalRequest.ID, ptkNatTraversalRequest.NatToken));
+            NATClientInfo recipientInfo = _puncherApp.Manager.GetPeerInfoByTickID(ptkNatTraversalRequest.RecipientID);
+
+
+            //연결하고자하는 대상이 없을 경우
+            if (recipientInfo == null)
+                _puncherApp.SendPacketToPeer(sender, new PtkEchoMessage(-1, ptkNatTraversalRequest.RecipientID + "와 NAT 연결에 실패했습니다."));
             else
-                ThreadSafeLogger.WriteLine(ptkNatTraversalRequest.RecipientID + " 클라이언트가 접속중이지 않습니다");
+            {
+                NetPeer recipientPeer = _puncherApp.Manager.GetPeerByTickID(recipientInfo.ID);
+                _puncherApp.SendPacketToPeer(recipientPeer, new PtkNatTraversalRequestAck(-1, ptkNatTraversalRequest.ID, ptkNatTraversalRequest.NatToken));
+            }
         }
 
-      
+        internal void OnPacketRequestP2PClientInfo(NetPeer sender, PtkRequestP2PClientInfo ptkRequestP2PClientInfo)
+        {
+            ThreadSafeLogger.WriteLine(ptkRequestP2PClientInfo.RequesterID + " 유저가 " + ptkRequestP2PClientInfo.ConnectedUserID + "의 정보를 요청하였습니다.");
+            NATClientInfo connectedUserInfo = _puncherApp.Manager.GetPeerInfoByTickID(ptkRequestP2PClientInfo.ConnectedUserID);
+            NetPeer requesterPeer = _puncherApp.Manager.GetPeerByTickID(ptkRequestP2PClientInfo.RequesterID);
+
+            if (requesterPeer == null)
+            {
+                //요청 유저가 중앙 서버에 접속이 안되있는 경우
+            }
+            else if (connectedUserInfo == null)
+            {
+                //요청받은 유저가 중앙 서버에 접속이 안되있는 경우
+            }
+            else
+            {
+                ThreadSafeLogger.WriteLine(ptkRequestP2PClientInfo.RequesterID + " 유저에게 " + ptkRequestP2PClientInfo.ConnectedUserID + "의 정보를 전송하였습니다");
+                _puncherApp.SendPacketToPeer(requesterPeer, new PtkRequestP2PClientInfoAck(-1, connectedUserInfo, ptkRequestP2PClientInfo.Key));
+            }
+        }
     }
 }

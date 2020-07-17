@@ -22,7 +22,6 @@ namespace NATPuncher
         private static NATPuncherApp s_Instance;
         //<---------------------------------------------->
         private Dictionary<string, WaitPeer> _waitingPeers;
-        private Dictionary<long, NATClientInfo> _connectedClients;
         private NetManager _puncher;
         private INATPuncherCustomizedListener _customizedEventListener;
         private NATPuncherListener _eventListener;
@@ -32,7 +31,6 @@ namespace NATPuncher
 
         //<---------------------------------------------->
         public Dictionary<string, WaitPeer> WaitingPeers { get => _waitingPeers; }
-        public Dictionary<long, NATClientInfo> ConnectedPeers { get => _connectedClients; }
         public INATPuncherCustomizedListener CustomizedEventListener { get => _customizedEventListener; }
         public NetManager Manager { get => _puncher; }
         public NATPacketProcessor PacketProcessor { get => _packetProcessor; }
@@ -46,7 +44,6 @@ namespace NATPuncher
                 s_Instance._eventListener = new NATPuncherListener(s_Instance);
                 s_Instance._customizedEventListener = s_Instance._eventListener;
                 s_Instance._waitingPeers = new Dictionary<string, WaitPeer>();
-                s_Instance._connectedClients = new Dictionary<long, NATClientInfo>();
                 s_Instance._puncher = new NetManager(s_Instance._eventListener);
                 s_Instance._puncher.NatPunchEnabled = true;
                 s_Instance._puncher.NatPunchModule.Init(s_Instance._eventListener);
@@ -81,8 +78,6 @@ namespace NATPuncher
             Broadcast(new PtkServerShutdown());
 
             _waitingPeers.Clear();
-            _connectedClients.Clear();
-
             _running.Value = false;
             _puncher.Flush();
             _puncher.Stop();
@@ -107,13 +102,47 @@ namespace NATPuncher
 
         public void Broadcast(INetworkPacket packet)
         {
-            foreach (NATClientInfo peer in _connectedClients.Values)
+            foreach (var peer in _puncher)
             {
                 NetDataWriter writer = new NetDataWriter();
                 writer.Put(packet.ToByteArray());
-                peer.Peer.Send(writer, DeliveryMethod.ReliableOrdered);
+                peer.Send(writer, DeliveryMethod.ReliableOrdered);
             }
             ThreadSafeLogger.WriteLine("브로드 캐스팅 전송완료 (전송타입 : {0})", DeliveryMethod.ReliableOrdered);
+        }
+
+
+        /// <param name="id">타임 ID값으로 가져옴 NetPeer ID값이 아님</param>
+        /// <returns></returns>
+        /// 
+
+        
+    }
+    public static class Ex
+    {
+        public static NetPeer GetPeerByTickID(this NetManager manager, long peerId)
+        {
+            return manager.FirstOrDefault(x => ((NATClientInfo)x.Tag).ID == peerId);
+        }
+
+        public static NATClientInfo GetPeerInfoByTickID(this NetManager manager, long peerId)
+        {
+            NetPeer peer = manager.GetPeerByTickID(peerId);
+
+            if (peer != null && peer.Tag != null)
+                return (NATClientInfo)peer.Tag;
+            else
+                return null;
+        }
+
+        public static NATClientInfo GetPeerInfoByNetPeerID(this NetManager manager, int peerId)
+        {
+            NetPeer peer = manager.GetPeerById(peerId);
+
+            if (peer != null && peer.Tag != null)
+                return (NATClientInfo)peer.Tag;
+            else
+                return null;
         }
     }
 }

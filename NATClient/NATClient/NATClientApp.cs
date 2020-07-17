@@ -34,24 +34,29 @@ namespace NATClient
     {
         private static NATClientApp s_Instance = null;
         //<---------------------------------------------->
-        
+
         private NetManager _manager;
         private long _Id;
         private NetPeer _serverPeer;
         private Dictionary<long, NATClientInfo> _serverConnectedClients;
-        private Dictionary<long, NATTraversalPeer> _p2pConnectedClients;
+        private Dictionary<string, NetPeer> _p2PConnectingWaitingPeers; //P2P로 연결되었으나 누군지 알지 못해 서버에 요청해 누군지 확인하기위해 대기중인 유저
         private INATClientCustomizedListener _customizedEventListener;
         private InterlockedBoolean _connected;
         private InterlockedBoolean _running;
         private NATClientListener _eventListener;
         private NATPacketProcessor _packetProcessor;
 
+        public int MaxTestPacketCount { get => 2000; }
+        public int TestPacketCount { get; set; }
+        public bool IsTestCase8Running { get; set; }
+
         public NetManager Manager { get => _manager; }
         public NetPeer ServerPeer { get => _serverPeer; }
         public INATClientCustomizedListener CustomizedEventListener { get => _customizedEventListener; }
         public NATPacketProcessor PacketProcessor { get => _packetProcessor; }
         public Dictionary<long, NATClientInfo> ServerConnectedClients { get => _serverConnectedClients; }
-        public Dictionary<long, NATTraversalPeer> P2PConnectedClients { get => _p2pConnectedClients; }
+        public Dictionary<string, NetPeer> P2PConnectingWaitingPeers { get => _p2PConnectingWaitingPeers; }
+        public IEnumerable<NetPeer> P2PConnectingPeers { get => _manager.Where(x => x != _serverPeer); }
         public long ID { get => _Id;  }
         public bool IsRunning() => _running.Value;
         public bool IsConnected() => _connected.Value;
@@ -62,17 +67,6 @@ namespace NATClient
             {
                 if (IsConnected())
                     return _manager.LocalEndPointv4.ToString();
-                else
-                    return "N/A";
-            }
-        }
-
-        public string ExternallP
-        {
-            get
-            {
-                if (IsConnected())
-                    return _serverConnectedClients.First(x => x.Value.ID == ID).Value.ExternalEndpoint.ToString();
                 else
                     return "N/A";
             }
@@ -92,11 +86,11 @@ namespace NATClient
                 s_Instance._manager = new NetManager(s_Instance._eventListener);
                 s_Instance._manager.NatPunchEnabled = true;
                 s_Instance._manager.NatPunchModule.Init(s_Instance._eventListener);
-                s_Instance._p2pConnectedClients = new Dictionary<long, NATTraversalPeer>();
                 s_Instance._connected = new InterlockedBoolean();
                 s_Instance._connected.Value = false;
                 s_Instance._packetProcessor = new NATPacketProcessor(s_Instance);
                 s_Instance._serverConnectedClients = new Dictionary<long, NATClientInfo>();
+                s_Instance._p2PConnectingWaitingPeers = new Dictionary<string, NetPeer>();
                 s_Instance._Id = DateTime.Now.Ticks;
                 ThreadSafeLogger.WriteLine("NAT Client 초기화 완료");
             }
@@ -142,7 +136,6 @@ namespace NATClient
             
             ThreadSafeLogger.WriteLine("NAT Client 중지");
 
-            _p2pConnectedClients.Clear();
             _serverConnectedClients.Clear();
             _customizedEventListener.OnClientNetworkClosed();
             _manager.Flush();
@@ -176,6 +169,12 @@ namespace NATClient
 
         public void SendPacketToMasterServer(INetworkPacket packet)
         {
+            if (_serverPeer == null)
+            {
+                ThreadSafeLogger.WriteLine("중앙서버 피어의 데이터가 존재하지 않습니다. 연결을 확인해주세요.");
+                return;
+            }
+
             if (_serverPeer.ConnectionState != ConnectionState.Connected)
             {
                 ThreadSafeLogger.WriteLine("상대방과 연결중이지 않습니다. 메시지 전송에 실패했습니다.");
@@ -199,7 +198,9 @@ namespace NATClient
             NetDataWriter writer = new NetDataWriter();
             writer.Put(packet.ToByteArray());
             peer.Send(writer, DeliveryMethod.ReliableOrdered);
-            ThreadSafeLogger.WriteLine("데이터 전송완료 (전송타입 : {0})", DeliveryMethod.ReliableOrdered);
+
+            if (IsTestCase8Running == false)
+                ThreadSafeLogger.WriteLine(peer.EndPoint + "에게 데이터 전송완료 (전송타입 : {0})", DeliveryMethod.ReliableOrdered);
         }
 
 
@@ -207,28 +208,75 @@ namespace NATClient
         {
             int idx = 0;
 
-            if (_serverConnectedClients.Count > 0)
+            foreach (NATClientInfo peerInfo in ServerConnectedClients.Values)
             {
-                foreach (KeyValuePair<long, NATClientInfo> client in _serverConnectedClients)
-                    ThreadSafeLogger.WriteLine("{0}.\tID ({1}) / IEP ({2}) / EEP ({3})", ++idx, client.Value.ID, client.Value.InternalEndpoint, client.Value.ExternalEndpoint);
+                if (peerInfo == null)
+                    ThreadSafeLogger.WriteLine("{0}.\tID ({1})", idx++, "알 수 없는 ID");
+                else
+                    ThreadSafeLogger.WriteLine("{0}.\tID ({1})", idx++, peerInfo.ID);
             }
-            else
-                ThreadSafeLogger.WriteLine("중앙서버에 접속중인 유저가 없습니다.");
 
+            if (_manager.Count() <= 1)
+            {
+                ThreadSafeLogger.WriteLine("중앙 서버에 접속중인 유저가 없습니다");
+            }
         }
 
         public void PrintP2PConnectedClients()
         {
             int idx = 0;
 
-            if (_serverConnectedClients.Count > 0)
+            foreach (NetPeer peer in P2PConnectingPeers)
             {
-                foreach (KeyValuePair<long, NATTraversalPeer> client in _p2pConnectedClients)
-                    ThreadSafeLogger.WriteLine("{0}.\tID ({1}) / IEP ({2}) / EEP ({3}) / HashCode : {4} / Token : {5}", ++idx, client.Value.ClientInfo.ID, client.Value.ClientInfo.InternalEndpoint, client.Value.ClientInfo.ExternalEndpoint, client.Value.ClientInfo.P2PPeer.GetHashCode(), client.Value.ClientInfo.NatToken);
-            }
-            else
-                ThreadSafeLogger.WriteLine("P2P 연결중인 유저가 없습니다.");
+                NATClientInfo clientInfo = peer.Tag as NATClientInfo;
 
+                if (clientInfo == null)
+                    ThreadSafeLogger.WriteLine("{0}.\tID ({1}) / EP ({2})", idx++, "알 수 없는 ID", peer.EndPoint);
+                else
+                    ThreadSafeLogger.WriteLine("{0}.\tID ({1}) / EP ({2})", idx++, clientInfo.ID, peer.EndPoint);
+            }
+
+            if (P2PConnectingPeers.Count() <= 0)
+            {
+                ThreadSafeLogger.WriteLine("중앙 서버에 접속중인 유저가 없습니다");
+            }
+        }
+    }
+
+    public static class Ex
+    {
+        public static NetPeer GetPeerByTickID(this NetManager manager, long peerId)
+        {
+            return manager.FirstOrDefault(x =>
+            {
+                NATClientInfo clientInfo = x.Tag as NATClientInfo;
+
+                if (clientInfo != null && clientInfo.ID == peerId)
+                    return true;
+                else if (clientInfo == null)
+                    Console.WriteLine(x.EndPoint + "의 정보가 null 입니다.");
+                return false;
+            });
+        }
+
+        public static NATClientInfo GetPeerInfoByTickID(this NetManager manager, long peerId)
+        {
+            NetPeer peer = manager.GetPeerByTickID(peerId);
+
+            if (peer != null && peer.Tag != null)
+                return (NATClientInfo)peer.Tag;
+            else
+                return null;
+        }
+
+        public static NATClientInfo GetPeerInfoByNetPeerID(this NetManager manager, int peerId)
+        {
+            NetPeer peer = manager.GetPeerById(peerId);
+
+            if (peer != null && peer.Tag != null)
+                return (NATClientInfo)peer.Tag;
+            else
+                return null;
         }
     }
 }

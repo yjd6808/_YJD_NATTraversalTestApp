@@ -59,16 +59,14 @@ namespace NATClient
         {
             byte[] receivedBytes = new byte[4096];
             reader.GetBytes(receivedBytes, reader.AvailableBytes);
-            try
-            {
-                
-
+            //try
+            //{
                 _clientApp.CustomizedEventListener.OnProcessPacket(peer, receivedBytes.ToP2PBase());
-            }
-            catch (Exception e)
-            {
-                ThreadSafeLogger.WriteLine("< 패킷 프로세싱 중 오류 발생 >\n" + e.Message);
-            }
+            //}
+            //catch (Exception e)
+            //{
+              //  ThreadSafeLogger.WriteLine("< 패킷 프로세싱 중 오류 발생 >\n" + e.Message);
+            //}
         }
 
         public void OnNetworkReceiveUnconnected(IPEndPoint remoteEndPoint, NetPacketReader reader, UnconnectedMessageType messageType)
@@ -79,76 +77,39 @@ namespace NATClient
             if (peer == _clientApp.ServerPeer)
             {
                 ThreadSafeLogger.WriteLine("서버와 연결되었습니다.");
-                ThreadSafeLogger.WriteLine("상대방 정보 : IP({0}) / 연결상태 : {1}", peer.EndPoint, peer.ConnectionState);
-                return;
+                ThreadSafeLogger.WriteLine("서버 정보 : IP({0}) / 연결상태 : {1}", peer.EndPoint, peer.ConnectionState);
             }
             else
             {
-                ThreadSafeLogger.WriteLine("상대방이 당신의 서버에 접속하였습니다");
-                ThreadSafeLogger.WriteLine("상대방 정보 : IP({0}) / 연결상태 : {1}", peer.EndPoint, peer.ConnectionState);
+                //TODO : P2P로 들어오게되면 클라 태그정보가 지워지므로 누군지 물어봐야한다.
+                //나 -> P2P 피어 : RequsetClientInfo(나의 ID) - 넌 누구냐?
+                //P2P 피어 -> 나 : RequsetClientInfoAck(나의 ID) - 난 이런 사람이다. ( 자기 자신의 정보는 자기가 들고 있으므로 )
 
-                NATClientInfo clientInfo = _clientApp.ServerConnectedClients.Values.FirstOrDefault(x => (x.P2PPeer != null && x.P2PPeer.EndPoint.Equals(peer.EndPoint)) || x.Peer.EndPoint.Equals(peer.EndPoint));
+                //위의 방법은 안됨 P2P도 똑같이 정보가 지워졌기 때문에 서버에 물어봐야함
+                //나 -> P2P피어 -> 서버 -> 나 순으로 이뤄줘야함
 
-                ThreadSafeLogger.WriteLine("-------------- P2P 정보");
-                foreach (var f in _clientApp.ServerConnectedClients.Values)
-                    ThreadSafeLogger.WriteLine(f.ToString() + " / " +  (f.P2PPeer == null ? "p2p Peer = null" : (" / p2p PeerEP : " + f.P2PPeer.EndPoint + " / p2p LocalEP : " + f.P2PPeer.NetManager.LocalEndPointv4)));
+                //나 -> P2P : RequsetClientInfo(나의 ID)
+                //P2P -> 서버 : RequsetClientInfo(P2P ID, 나의 ID)
+                //서버 -> 나: RequsetClientInfoAck(-1, P2P의 클라 정보)
 
-                ThreadSafeLogger.WriteLine("-------------- 일반 정보");
-                foreach (var f in _clientApp.ServerConnectedClients.Values)
-                    ThreadSafeLogger.WriteLine(f.ToString() + " / EP : " + f.Peer.EndPoint + " / LocalEP : " + f.Peer.NetManager.LocalEndPointv4);
-
-                if (clientInfo == null)
-                {
-                    ThreadSafeLogger.WriteLine(peer.EndPoint + "가 존재하지 않음");
-                    return;
-                }
-
-
-                if (_clientApp.P2PConnectedClients.TryGetValue(clientInfo.ID, out NATTraversalPeer natTraversalClientInfo) == false)
-                {
-                    _clientApp.P2PConnectedClients.Add(clientInfo.ID, new NATTraversalPeer(clientInfo.NatToken, clientInfo));
-                    _clientApp.P2PConnectedClients[clientInfo.ID].ClientInfo.P2PPeer = peer;
-                }
-                else
-                {
-                    _clientApp.P2PConnectedClients[clientInfo.ID].ClientInfo.P2PPeer = peer;
-                }
-                _clientApp.P2PConnectedClients[clientInfo.ID].ClientInfo.P2PConnected = true;
-
-                ThreadSafeLogger.WriteLine("P2P 연결 성공!");
-            }
-
-            ThreadSafeLogger.WriteLine("접속한 P2P 클라의 연결된 클라수 : {0}", peer.NetManager.ConnectedPeersCount);
-
-            if (peer.ConnectionState == ConnectionState.Connected)
-            {
-                foreach (NetPeer conn in peer.NetManager)
-                {
-                    ThreadSafeLogger.WriteLine("접속한 P2P 클라의 연결된 IP : {0}", peer.EndPoint);
-                }
+                string key = Program.RandomString(30);
+                _clientApp.SendPacketToPeer(peer, new PtkRequestP2PClientInfo(_clientApp.ID, _clientApp.ID, key));
+                _clientApp.P2PConnectingWaitingPeers.Add(key, peer);
+                ThreadSafeLogger.WriteLine(peer.EndPoint + "가 접속하였습니다. 누군지 접속한 상대에게 정보를 요청하였습니다.\n상대는 서버측에 물어봅니다.\n그리고 중앙서버가 누군지 파악하여 회신해 줄 것입니다.");
             }
         }
 
         public void OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo)
         {
+            //서버와 연결끊어지면 걍 노출력
             if (peer == _clientApp.ServerPeer)
-                ThreadSafeLogger.WriteLine("당신과 연결된 유저(" + peer.EndPoint + ")와 연결이 끊어졌습니다. / 이유 : " + disconnectInfo.Reason);
-            NATTraversalPeer clientInfo = _clientApp.P2PConnectedClients.Values.FirstOrDefault(x => x.ClientInfo.P2PPeer != null && x.ClientInfo.P2PPeer.EndPoint.Equals(peer.EndPoint));
-
-            if (clientInfo == null)
-            {
-                ThreadSafeLogger.WriteLine(peer.EndPoint + "가 존재하지 않음");
                 return;
-            }
 
-
-            if (_clientApp.P2PConnectedClients.TryGetValue(clientInfo.ClientInfo.ID, out NATTraversalPeer natTraversalClientInfo))
-            {
-                _clientApp.P2PConnectedClients.Remove(clientInfo.ClientInfo.ID);
+            NATClientInfo clientInfo = peer.Tag as NATClientInfo;
+            if (clientInfo == null)
+                ThreadSafeLogger.WriteLine("당신과 연결되었던 " + peer.EndPoint + "와 연결이 끊어졌습니다. \n해당 유저의 데이터가 없습니다  / 이유 : " + disconnectInfo.Reason);
+            else
                 ThreadSafeLogger.WriteLine("당신과 연결된 유저(" + peer.EndPoint + ")와 P2P 연결이 끊어졌습니다. / 이유 : " + disconnectInfo.Reason);
-            }
-
-            //접속한 p2p 유저의 ID정보를 가져옴
         }
 
         //<------------------------------------------------------------------------------------------------->
@@ -163,50 +124,7 @@ namespace NATClient
         public void OnNatIntroductionSuccess(IPEndPoint targetEndPoint, NatAddressType natAddressType, string token)
         {
             NetPeer p2pPeer = _clientApp.Manager.Connect(targetEndPoint, NATClientConfiguration.ConnectionKey);
-
-            NATClientInfo clientInfo = _clientApp.ServerConnectedClients.Values.FirstOrDefault(x => x.NatToken == token);
-
-            if (clientInfo == null)
-            {
-                ThreadSafeLogger.WriteLine(p2pPeer.EndPoint + " 에 대한 토큰값이 존재하지 않습니다. 연결을 거부합니다.");
-                p2pPeer.Disconnect();
-                return;
-            }
-            else
-                ThreadSafeLogger.WriteLine(p2pPeer.EndPoint + " 과 토큰이 일치합니다.");
-
-            //Console.WriteLine("Id : " + p2pPeer.Id + " remote ep : " + p2pPeer.EndPoint + "local ep : " + p2pPeer.NetManager.LocalEndPointv4.ToString());
-            //foreach (var f in _clientApp.ServerConnectedClients)
-            //Console.WriteLine(f.Value.InternalEndpoint + " / " + f.Value.ExternalEndpoint);
-
-            //Console.WriteLine("==");
-            //foreach (var f in _clientApp.ServerConnectedClients)
-            //    Console.WriteLine("Id : " + f.Value.Peer.Id + "remote ep : " + f.Value.Peer.EndPoint + "local ep : " + f.Value.Peer.NetManager.LocalEndPointv4.ToString());
-
-
-
-            //if (clientInfo.Value == null) 
-            //{
-            //    ThreadSafeLogger.WriteLine(p2pPeer.EndPoint + "는 중앙서버와 연결중이지 않습니다. P2P 연결에 실패합니다");
-            //    return;
-            //}
-
-            clientInfo.P2PPeer = p2pPeer;
-            clientInfo.P2PPeer.Tag = token;
-
-            ThreadSafeLogger.WriteLine(p2pPeer.EndPoint + "의 토큰 태그 설정완료 " + token);
-
-            if (_clientApp.P2PConnectedClients.TryGetValue(clientInfo.ID, out NATTraversalPeer natTraversalClientInfo) == false)
-                _clientApp.P2PConnectedClients.Add(clientInfo.ID, new NATTraversalPeer(token, clientInfo));
-            else
-                _clientApp.P2PConnectedClients[clientInfo.ID] = new NATTraversalPeer(token, clientInfo);
-
-            ThreadSafeLogger.WriteLine("축하드립니다!\nUdp Nat Traversal에 성공했습니다.\n상대 클라이언트와 연결되었습니다. (상태 : {0}) (NAT 주소 타입 : {1})", p2pPeer.ConnectionState.ToString(), natAddressType);
-            ThreadSafeLogger.WriteLine("NAT 접속한 P2P 클라의 연결된 클라수 : {0}", p2pPeer.NetManager.ConnectedPeersCount);
-            foreach (NetPeer conn in p2pPeer.NetManager)
-            {
-                ThreadSafeLogger.WriteLine("NAT 접속한 P2P 클라의 연결된 IP : {0} / 상태 : {1}", conn.EndPoint, conn.ConnectionState);
-            }
+            ThreadSafeLogger.WriteLine("\n축하드립니다!\nUdp Nat Traversal에 성공했습니다.\n상대 클라이언트와 연결되었습니다. (상태 : {0}) (NAT 주소 타입 : {1})", p2pPeer.ConnectionState.ToString(), natAddressType);
         }
 
         //<------------------------------------------------------------------------------------------------->
@@ -238,7 +156,19 @@ namespace NATClient
                 _clientApp.PacketProcessor.OnClientNatTraversalRequestAck(sender, (PtkNatTraversalRequestAck)networkPacket);
             else if (networkPacket.GetType() == typeof(PtkChatMessage))
                 _clientApp.PacketProcessor.OnClientChatMessage(sender, (PtkChatMessage)networkPacket);
+            else if (networkPacket.GetType() == typeof(PtkRequestP2PClientInfo))
+                _clientApp.PacketProcessor.OnClientRequestP2PClientInfo(sender, (PtkRequestP2PClientInfo)networkPacket);
+            else if (networkPacket.GetType() == typeof(PtkRequestP2PClientInfoAck))
+                _clientApp.PacketProcessor.OnClientRequestP2PClientInfoAck(sender, (PtkRequestP2PClientInfoAck)networkPacket);
 
+            else if (networkPacket.GetType() == typeof(PtkReliableTestStart))
+                _clientApp.PacketProcessor.OnClientReliableTestStart(sender, (PtkReliableTestStart)networkPacket);
+            else if (networkPacket.GetType() == typeof(PtkReliableTestStartAck))
+                _clientApp.PacketProcessor.OnClientReliableTestStartAck(sender, (PtkReliableTestStartAck)networkPacket);
+            else if (networkPacket.GetType() == typeof(PtkReliableTest))
+                _clientApp.PacketProcessor.OnClientReliableTest(sender, (PtkReliableTest)networkPacket);
+            else if (networkPacket.GetType() == typeof(PtkReliableTestAck))
+                _clientApp.PacketProcessor.OnClientReliableTestAck(sender, (PtkReliableTestAck)networkPacket);
             
         }
     }

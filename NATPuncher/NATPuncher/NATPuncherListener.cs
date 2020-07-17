@@ -165,6 +165,8 @@ namespace NATPuncher
                 _puncherApp.PacketProcessor.OnPacketEchoMessage(sender, (PtkEchoMessage)networkPacket);
             else if (networkPacket.GetType() == typeof(PtkNatTraversalRequest))
                 _puncherApp.PacketProcessor.OnPacketNatTraversalRequest(sender, (PtkNatTraversalRequest)networkPacket);
+            else if (networkPacket.GetType() == typeof(PtkRequestP2PClientInfo))
+                _puncherApp.PacketProcessor.OnPacketRequestP2PClientInfo(sender, (PtkRequestP2PClientInfo)networkPacket);
         }
     }
 }
