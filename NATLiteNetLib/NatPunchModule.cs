@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
@@ -133,10 +134,14 @@ namespace LiteNetLib
             req.External = hostExternal;
             Send(req, clientExternal);
 
+            Console.WriteLine(req.Token + " NatIntroduceResponsePacket 패킷을 " + clientExternal + "에 전송하였습니다.");
+
             //Second packet (client) send to server
             req.Internal = clientInternal;
             req.External = clientExternal;
             Send(req, hostExternal);
+
+            Console.WriteLine(req.Token + " NatIntroduceResponsePacket 패킷을 " + hostExternal + "에 전송하였습니다.");
         }
 
         public void PollEvents()
@@ -215,6 +220,8 @@ namespace LiteNetLib
             SocketError errorCode = 0;
             _socket.Ttl = 2;
             _socket.SendTo(new[] { (byte)PacketProperty.Empty }, 0, 1, req.External, ref errorCode);
+
+            
 
             // send external punch
             _socket.Ttl = NetConstants.SocketTTL;

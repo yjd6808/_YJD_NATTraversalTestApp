@@ -92,6 +92,7 @@ namespace NATClient
                 s_Instance._serverConnectedClients = new Dictionary<long, NATClientInfo>();
                 s_Instance._p2PConnectingWaitingPeers = new Dictionary<string, NetPeer>();
                 s_Instance._Id = DateTime.Now.Ticks;
+                NetDebug.Logger = ThreadSafeLogger.GetInstance(HostType.Client, s_Instance._Id.ToString());
                 ThreadSafeLogger.WriteLine("NAT Client 초기화 완료");
             }
             return s_Instance;
@@ -231,9 +232,9 @@ namespace NATClient
                 NATClientInfo clientInfo = peer.Tag as NATClientInfo;
 
                 if (clientInfo == null)
-                    ThreadSafeLogger.WriteLine("{0}.\tID ({1}) / EP ({2})", idx++, "알 수 없는 ID", peer.EndPoint);
+                    ThreadSafeLogger.WriteLine(true, "{0}.\tID ({1}) / EP ({2})", idx++, "알 수 없는 ID",  peer.EndPoint);
                 else
-                    ThreadSafeLogger.WriteLine("{0}.\tID ({1}) / EP ({2})", idx++, clientInfo.ID, peer.EndPoint);
+                    ThreadSafeLogger.WriteLine(true, "{0}.\tID ({1}) / EP ({2})", idx++, clientInfo.ID, peer.EndPoint);
             }
 
             if (P2PConnectingPeers.Count() <= 0)

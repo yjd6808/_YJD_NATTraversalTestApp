@@ -13,14 +13,15 @@ namespace NATPuncher
     {
         static ProgramExitListener _exitListener = new ProgramExitListener();
 
-        class A
+        [Conditional("A")]
+        static void AA()
         {
-            
-            public int a;
-            public A(int a) { this.a = a; }
+            Console.WriteLine("aa");
         }
+
         static void Main(string[] args)
         {
+            AA();
             Task.Run(() => NATPuncherApp.GetInstance().Run());
             _exitListener.ExitEvent += OnConsoleExit;
             _exitListener.RefreshHandler();

@@ -33,15 +33,15 @@ namespace NATClient
                 if (NATClientApp.GetInstance().IsTestCase8Running)
                     continue;
 
-                ThreadSafeLogger.WriteLine("당신의 ID : {0} / Internal IP : {1}", NATClientApp.GetInstance().ID, NATClientApp.GetInstance().InternalIP);
-                ThreadSafeLogger.WriteLine("1. 서버와 연결");
-                ThreadSafeLogger.WriteLine("2. 서버와 연결 종료");
-                ThreadSafeLogger.WriteLine("3. 서버에 에코 메시지 전달");
-                ThreadSafeLogger.WriteLine("4. 서버에 접속한 클라이언트 목록 출력");
-                ThreadSafeLogger.WriteLine("5. NAT 홀펀칭 P2P 연결시도");
-                ThreadSafeLogger.WriteLine("6. P2P로 연결된 클라 목록 보기");
-                ThreadSafeLogger.WriteLine("7. P2P로 연결된 클라에게 채팅 메시지 전송");
-                ThreadSafeLogger.WriteLine("8. P2P로 연결된 클라에게 Udp 패킷 신뢰성 검사 4096바이트 에코 송수신 2천회 시작");
+                ThreadSafeLogger.WriteLine(false, "당신의 ID : {0} / Internal IP : {1}", NATClientApp.GetInstance().ID, NATClientApp.GetInstance().InternalIP);
+                ThreadSafeLogger.WriteLine("1. 서버와 연결", false);
+                ThreadSafeLogger.WriteLine("2. 서버와 연결 종료", false);
+                ThreadSafeLogger.WriteLine("3. 서버에 에코 메시지 전달", false);
+                ThreadSafeLogger.WriteLine("4. 서버에 접속한 클라이언트 목록 출력", false);
+                ThreadSafeLogger.WriteLine("5. NAT 홀펀칭 P2P 연결시도", false);
+                ThreadSafeLogger.WriteLine("6. P2P로 연결된 클라 목록 보기", false);
+                ThreadSafeLogger.WriteLine("7. P2P로 연결된 클라에게 채팅 메시지 전송", false);
+                ThreadSafeLogger.WriteLine("8. P2P로 연결된 클라에게 Udp 패킷 신뢰성 검사 시작", false);
                 ThreadSafeLogger.Write("> 입력 : ");
                 string cmd = Console.ReadLine();
 
@@ -193,7 +193,7 @@ namespace NATClient
                         string p2pClientIdxStr2 = Console.ReadLine();
 
                         int.TryParse(p2pClientIdxStr2, out int selectedP2pClientIdx2);
-                        if (p2pClientIdxStr2.Length <= 0)
+                        if (p2pClientIdxStr2.Length <= 0 || (selectedP2pClientIdx2 < 0 || selectedP2pClientIdx2 >= NATClientApp.GetInstance().P2PConnectingPeers.Count()))
                             ThreadSafeLogger.WriteLine("선택을 해라 좀!");
                         else
                         {

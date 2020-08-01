@@ -63,14 +63,14 @@ namespace NATPuncher
         {
             byte[] receivedBytes = new byte[4096];
             reader.GetBytes(receivedBytes, reader.AvailableBytes);
-            try
-            {
+            //try
+            //{
                 _puncherApp.CustomizedEventListener.OnProcessPacket(peer, receivedBytes.ToP2PBase());
-            }
-            catch (Exception e)
-            {
-                ThreadSafeLogger.WriteLine("< 패킷 프로세싱 중 오류 발생 >\n" + e.Message);
-            }
+            //}
+            //catch (Exception e)
+            //{
+                //ThreadSafeLogger.WriteLine("< 패킷 프로세싱 중 오류 발생 >\n" + e.Message);
+            //}
 
         }
 
@@ -82,6 +82,7 @@ namespace NATPuncher
         {
             ThreadSafeLogger.WriteLine("상대방이 당신의 서버를 떠났습니다");
             ThreadSafeLogger.WriteLine("상대방 정보 : IP({0})", peer.EndPoint);
+            peer.Tag = null;
         }
 
         void INetEventListener.OnPeerConnected(NetPeer peer)
@@ -103,6 +104,7 @@ namespace NATPuncher
                 if (wpeer.InternalAddr.Equals(localEndPoint) &&
                     wpeer.ExternalAddr.Equals(remoteEndPoint))
                 {
+                    Console.WriteLine("같은 사람이 접속하였습니다\n. 해당 피어를 리프레쉬합니다.");
                     wpeer.Refresh(); //매칭 시도한 시간을 업데이트 해줌
                     return;
                 }

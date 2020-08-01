@@ -124,7 +124,10 @@ namespace NATClient
         public void OnNatIntroductionSuccess(IPEndPoint targetEndPoint, NatAddressType natAddressType, string token)
         {
             NetPeer p2pPeer = _clientApp.Manager.Connect(targetEndPoint, NATClientConfiguration.ConnectionKey);
-            ThreadSafeLogger.WriteLine("\n축하드립니다!\nUdp Nat Traversal에 성공했습니다.\n상대 클라이언트와 연결되었습니다. (상태 : {0}) (NAT 주소 타입 : {1})", p2pPeer.ConnectionState.ToString(), natAddressType);
+            if (p2pPeer != null)
+                ThreadSafeLogger.WriteLine("\n축하드립니다!\nUdp Nat Traversal에 성공했습니다.\n상대 클라이언트와 연결되었습니다. (상태 : {0}) (NAT 주소 타입 : {1})", p2pPeer.ConnectionState.ToString(), natAddressType);
+            else
+                ThreadSafeLogger.WriteLine("\n축하드립니다!\nUdp Nat Traversal에 성공했습니다.\n상대 클라이언트와 연결되었습니다. (EP : {0}) (NAT 주소 타입 : {1})", targetEndPoint.ToString(), natAddressType);
         }
 
         //<------------------------------------------------------------------------------------------------->

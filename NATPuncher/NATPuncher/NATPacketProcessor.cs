@@ -38,14 +38,17 @@ namespace NATPuncher
                 _puncherApp.Manager.GetPeerInfoByNetPeerID(peer.Id).Update(new NATClientInfo(ptkClientConnect.ID, peer));
 
             NATClientInfo clinetInfo = peer.Tag as NATClientInfo;
+            clinetInfo.Peer = peer;
 
             //접속중인 유저들 중 접속한 유저만 제외하고 모두 에코 전송
             _puncherApp.Manager
                 .Except(new NetPeer[1] { peer })
+                .Where(x => x.Tag != null)
                 .ForEach( x => _puncherApp.SendPacketToPeer(x, new PtkClientConnectAck(-1, clinetInfo)));
 
             //현재 접속중인 유저 정보들을 접속한 유저에게 전달
             _puncherApp.Manager
+                .Where(x => x.Tag != null)
                 .ForEach(x => _puncherApp.SendPacketToPeer(peer, new PtkClientConnectAck(-1, _puncherApp.Manager.GetPeerInfoByNetPeerID(x.Id))));
         }
 
@@ -56,6 +59,7 @@ namespace NATPuncher
             //남아있는 유저들에게 모두 전송
             _puncherApp.Manager
                 .Except(new NetPeer[1] { sender })
+                .Where(x => x.Tag != null)
                 .ForEach(x => _puncherApp.SendPacketToPeer(x, new PtkClientDisconnectAck(-1, ptkClientDisconnect.ID)));
         }
 

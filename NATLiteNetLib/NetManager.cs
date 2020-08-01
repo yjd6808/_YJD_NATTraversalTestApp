@@ -1107,7 +1107,6 @@ namespace LiteNetLib
                 for (var netPeer = _headPeer; netPeer != null; netPeer = netPeer.NextPeer)
                 {
                     netPeer.Send(data, start, length, channelNumber, options);
-                    Console.WriteLine(netPeer.EndPoint + "에게 메시지 전송완료");
                 }
             }
             finally

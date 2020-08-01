@@ -1,4 +1,7 @@
-﻿using System;
+﻿#define DEBUG
+#define DEBUG_MESSAGES
+
+using System;
 using System.Diagnostics;
 
 namespace LiteNetLib
@@ -41,7 +44,8 @@ namespace LiteNetLib
                 }
                 else
                 {
-                    Logger.WriteNet(logLevel, str, args);
+                    if (str.StartsWith("[NAT]"))
+                        Logger.WriteNet(logLevel, str, args);
                 }
             }
         }
@@ -55,6 +59,7 @@ namespace LiteNetLib
         [Conditional("DEBUG_MESSAGES")]
         internal static void Write(NetLogLevel level, string str, params object[] args)
         {
+            
             WriteLogic(level, str, args);
         }
 

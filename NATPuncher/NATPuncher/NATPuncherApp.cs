@@ -1,4 +1,5 @@
-﻿// ===============================
+﻿
+// ===============================
 // @AUTHOR      : 윤정도
 // @CREATE DATE : 2020-05-30 오후 3:53:34   
 // @PURPOSE     : NAT Puncher 메인 어플
@@ -7,6 +8,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -35,8 +37,14 @@ namespace NATPuncher
         public NetManager Manager { get => _puncher; }
         public NATPacketProcessor PacketProcessor { get => _packetProcessor; }
 
+        [Conditional("A"), Conditional("B")]
+        static void AA()
+        {
+            Console.WriteLine("fd");
+        }
         public static NATPuncherApp GetInstance()
         {
+            AA();
             if (s_Instance == null)
             {
                 // < 초기화 >
@@ -50,6 +58,7 @@ namespace NATPuncher
                 s_Instance._running = new InterlockedBoolean();
                 s_Instance._running.Value = false;
                 s_Instance._packetProcessor = new NATPacketProcessor(s_Instance);
+                NetDebug.Logger = ThreadSafeLogger.GetInstance(HostType.Server, "");
                 ThreadSafeLogger.WriteLine("NAT Puncher 초기화완료");
             }
             return s_Instance;
@@ -97,7 +106,8 @@ namespace NATPuncher
             NetDataWriter writer = new NetDataWriter();
             writer.Put(packet.ToByteArray());
             peer.Send(writer, DeliveryMethod.ReliableOrdered);
-            ThreadSafeLogger.WriteLine("데이터 전송완료 (전송타입 : {0})", DeliveryMethod.ReliableOrdered);
+            ThreadSafeLogger.WriteLine(peer.EndPoint + "에게 " + packet.GetType() + "패킷 전송완료 (전송타입 : {0})", DeliveryMethod.ReliableOrdered);
+            
         }
 
         public void Broadcast(INetworkPacket packet)
@@ -122,7 +132,7 @@ namespace NATPuncher
     {
         public static NetPeer GetPeerByTickID(this NetManager manager, long peerId)
         {
-            return manager.FirstOrDefault(x => ((NATClientInfo)x.Tag).ID == peerId);
+            return manager.FirstOrDefault(x => x.Tag != null && ((NATClientInfo)x.Tag).ID == peerId);
         }
 
         public static NATClientInfo GetPeerInfoByTickID(this NetManager manager, long peerId)
